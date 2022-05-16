@@ -67,4 +67,4 @@ Exmple return **$data**:<br/>
 }
 ```
 The script was tested on 2GB access.log file.<br/><br/>
-To start user the script - simply require ReaderLog class and see how to use it in **script_prod.php** file.
+To start to use the script simply require ReaderLog class and see how to use it in **script_prod.php**.
