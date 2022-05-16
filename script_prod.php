@@ -275,6 +275,6 @@ if (!$lr->splitLogFile()) { print 'Could not find splitted log files.'; return; 
 $data = $lr->getLogInfo();
 
 print $lr->formatBytes(memory_get_peak_usage());
-echo '<pre>'; var_dump($data); echo '</pre>';
+echo '<pre>'; print json_encode($data, JSON_PRETTY_PRINT); echo '</pre>';
 
 ?>
