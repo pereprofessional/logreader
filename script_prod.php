@@ -4,7 +4,7 @@ class LogReader
 	protected $tempsFolder = 'temps'; // папка хранения частей разбитого файла
 	protected $linesMax = 29000; // по сколько строк разбивать на отдельные файлы
 	protected $execMinutesLimit = 5; // ограничение работы скрипта в минутах, 0 - без ограничения
-	protected $botDetection = [ // данные о ботах. ключ - подстрока поиска в юзер агенте. контент - отображаемое имя бота
+	protected $botDetection = [ // данные о ботах. ключ - подстрока поиска в юзер агенте
 		'googlebot' => 'Google',
 		'yandexbot' => 'Yandex',
 		'bingbot' => 'Bing',
@@ -19,70 +19,86 @@ class LogReader
 		set_time_limit(60 * $this->execMinutesLimit);
 	}
 
-	// разделяем лог файл на несколько частей поменьше
 	public function splitLogFile() 
 	{
 		$source = $this->logFileName;
-		$i = 0;
-		$j = 1;
+	    	$i = 0;
+	    	$j = 1;
 
-	    	if (file_exists($this->tempsFolder)) $this->deleteDirectory($this->tempsFolder);
-	    	mkdir($this->tempsFolder, 0777, true);
+    		if (file_exists($this->tempsFolder)) $this->deleteDirectory($this->tempsFolder);
+    		mkdir($this->tempsFolder, 0777, true);
 
 	    	$handle = fopen($source, "r");
 	    	while (($line = fgets($handle)) !== false)
 	    	{
-	    	//if ($j == 2) break;
+	    		$fname = $this->tempsFolder.'/temp_'.$source.'_part-'.$j;
+    			$fhandle = fopen($fname, 'a');
+    			fwrite($fhandle, $line);
 
-			$fname = $this->tempsFolder.'/temp_'.$source.'_part-'.$j;
-	    		$fhandle = fopen($fname, 'a');
-	    		fwrite($fhandle, $line);
+    			if ($i == 0)
+	    			array_push($this->splittedLogFileNames, $fname);	    	
 
-	    		if ($i == 0)
-		    		array_push($this->splittedLogFileNames, $fname);	    	
+    			if ($i + 1 == $this->linesMax)
+    				fclose($fhandle);
 
-	    		if ($i+1 == $this->linesMax)
-	    			fclose($fhandle);
-
-		    	if ($i+1 < $this->linesMax)
-		    		$i++;
-		    	else
-		    	{
-		    		$i = 0;
-		    		$j++;
-		    	}
-		}
+	    		if ($i+1 < $this->linesMax)
+	    			$i++;
+	    		else
+	    		{
+	    			$i = 0;
+	    			$j++;
+	    		}
+	    	}
 	    	fclose($handle);
 	    	if (count($this->splittedLogFileNames) > 0) return true; else return false;
+	}
+
+	protected function deleteDirectory($dirName) 
+	{
+        	if (is_dir($dirName))
+           	$dirHandle = opendir($dirName);
+     	if (!$dirHandle)
+          	return false;
+     	while ($file = readdir($dirHandle)) 
+     	{
+           	if ($file != "." && $file != "..") 
+           	{
+                	if (!is_dir($dirName."/".$file))
+                    	unlink($dirName."/".$file);
+                	else
+                     	delete_directory($dirName.'/'.$file);
+           	}
+     	}
+     	closedir($dirHandle);
+     	rmdir($dirName);
+     	return true;
 	}
 
 	public function formatLineToArray($line)
 	{
 		preg_match("/^(\S+) (\S+) (\S+) \[([^:]+):(\d+:\d+:\d+) ([^\]]+)\] \"(\S+) (.*?) (\S+)\" (\S+) (\S+) (\".*?\") (\".*?\")$/", $line, $matches);
-    	$logs = $matches;
+    		$logs = $matches;
 
-    	if (isset($logs[0])) 
-	    {
-	      	$formated_log = array(); 
-	      	$formated_log['ip'] = $logs[1];
-	      	$formated_log['identity'] = $logs[2];
-	      	$formated_log['user'] = $logs[2];
-	      	$formated_log['date'] = $logs[4];
-	      	$formated_log['time'] = $logs[5];
-	      	$formated_log['timezone'] = $logs[6];
-	      	$formated_log['method'] = $logs[7];
-	      	$formated_log['path'] = $logs[8];
-	      	$formated_log['protocal'] = $logs[9];
-	      	$formated_log['status'] = $logs[10];
-	      	$formated_log['bytes'] = $logs[11];
-	      	$formated_log['referer'] = $logs[12];
-	      	$formated_log['agent'] = $logs[13];
-	      	return $formated_log; 
-	    }
-	    else
-	    {
+    		if (isset($logs[0])) 
+	    	{
+	      	$formatedLog = array(); 
+	      	$formatedLog['ip'] = $logs[1];
+	      	$formatedLog['identity'] = $logs[2];
+	      	$formatedLog['user'] = $logs[2];
+	      	$formatedLog['date'] = $logs[4];
+	      	$formatedLog['time'] = $logs[5];
+	      	$formatedLog['timezone'] = $logs[6];
+	      	$formatedLog['method'] = $logs[7];
+	      	$formatedLog['path'] = $logs[8];
+	      	$formatedLog['protocal'] = $logs[9];
+	      	$formatedLog['status'] = $logs[10];
+	      	$formatedLog['bytes'] = $logs[11];
+	      	$formatedLog['referer'] = $logs[12];
+	      	$formatedLog['agent'] = $logs[13];
+	     	return $formatedLog; 
+	    	}
+	    	else
 	      	return false;
-	    }
 
 	}
 
@@ -104,133 +120,179 @@ class LogReader
 		$this->logFileName = $fn;
 	}
 
-	public function getLogInfo()
+	public function getLogLight()
+	{
+		$fp = fopen($this->logFileName, 'r');
+
+		$processedRecords = 0;
+		$totalRecords = 0;
+		$totalBytes = 0;
+		$totalPaths = [];
+		$totalStatuses = [];
+		$totalKnownBots = [];
+		$totalunknownBots = [];
+		while (($line = fgets($fp)) !== false) 
+		{
+			$totalRecords++;
+			$record = $this->formatLineToArray($line);
+			if (!$record) continue;
+
+			if (is_numeric($record['bytes'])) $totalBytes += $record['bytes'];
+			array_push($totalPaths, $record['path']);
+			array_push($totalStatuses, $record['status']);
+			if ($this->isUserAgentBot($record['agent']))
+			{
+				$botInfo = $this->isUserAgentBotKnown($record['agent']);
+				if ($botInfo)
+					$totalKnownBots[] = $botInfo;
+				else
+					$totalunknownBots[] = $record['agent'];
+			}
+
+			$processedRecords++;
+		}
+		fclose($fp);
+
+		$output = [
+			'lines' => [
+				'total' => $totalRecords,
+				'good' => $processedRecords,
+				'bad' => $totalRecords - $processedRecords,
+			],
+			'hits' => $processedRecords,
+			'bytes' => $totalBytes,
+			'paths' => count(array_unique($totalPaths)),
+			'statuses' => array_count_values($totalStatuses),
+			'bots' => [
+				'known' => array_count_values($totalKnownBots),
+				'unknown' => array_count_values($totalunknownBots),
+			]
+		];
+
+		return $output;
+	}
+
+	public function getLogHeavy()
 	{
 		$files = $this->splittedLogFileNames;
-		$i = 0; // считаем строки
-		$j = 0; // считаем файлы
-		// массивы для хранения path
-		$old_paths = [];
-		$cur_paths = [];
-		// массивы для хранения status 
-		$old_statuses = []; 
-		$cur_statuses = []; 
-		// массивы для хранения известных ботов (из $this->botDetection())
-		$old_bots_known = [];
-		$cur_bots_known = [];
-		// массивы для хранения неизвестных ботов
-		$old_bots_unknown = [];
-		$cur_bots_unknown = [];
-
-		$records_all = 0; // всего записей
-		$records_valid = 0; // всего валидных записей 
-		$bytes = 0; // общий трафик
+		$i = 0;
+		$j = 0;
+		$oldPaths = [];
+		$curPaths = [];
+		$recordsAll = 0; 
+		$recordsValid = 0;  
+		$bytes = 0; 
+		$paths = []; 
+		$oldStatuses = []; 
+		$curStatuses = []; 
+		$oldBotsKnown = [];
+		$curBotsKnown = [];
+		$oldBotsUnknown = [];
+		$curBotsUnknown = [];
 		foreach ($files as $key => $file)
 		{
 			$fp = fopen($file, 'r');
 
 			while (($line = fgets($fp)) !== false) 
 			{
-				$records_all++;
+				$recordsAll++;
 				$record = $this->formatLineToArray($line);
 				if (!$record) continue;
 
 				if (is_numeric($record['bytes'])) $bytes += $record['bytes'];
-				$cur_paths[] = $record['path'];
-				$cur_statuses[] = $record['status'];
+				$curPaths[] = $record['path'];
+				$curStatuses[] = $record['status'];
 
 				if ($this->isUserAgentBot($record['agent']))
 				{
 					$botInfo = $this->isUserAgentBotKnown($record['agent']);
 					if ($botInfo)
-						$cur_bots_known[] = $botInfo;
+						$curBotsKnown[] = $botInfo;
 					else
-						$cur_bots_unknown[] = $record['agent'];
+						$curBotsUnknown[] = $record['agent'];
 				}
 
 				$i++;
 			}
 			fclose($fp);
 
-			if (count($files) == 1) // если всего один файл
+			if (count($files) == 1)
 			{
-				$old_paths = array_unique($cur_paths);
-				$old_statuses = array_count_values($cur_statuses);
-				$old_bots_known = array_count_values($cur_bots_known);
-				$old_bots_unknown = array_count_values($cur_bots_unknown);
+				$oldPaths = array_unique($curPaths);
+				$oldStatuses = array_count_values($curStatuses);
+				$oldBotsKnown = array_count_values($curBotsKnown);
+				$oldBotsUnknown = array_count_values($curBotsUnknown);
 			}
-			else // если лог был разделён на несколько файлов
+			else
 			{
-				if ($j == 0) // первый файл
+				if ($j == 0)
 				{
-					$old_paths = array_unique($cur_paths);
-					$cur_paths = [];
+					$oldPaths = array_unique($curPaths);
+					$curPaths = [];
 
-					$old_statuses = array_count_values($cur_statuses);
-					$cur_statuses = [];
+					$oldStatuses = array_count_values($curStatuses);
+					$curStatuses = [];
 
-					$old_bots_known = array_count_values($cur_bots_known);
-					$cur_bots_known = [];
+					$oldBotsKnown = array_count_values($curBotsKnown);
+					$curBotsKnown = [];
 
-					$old_bots_unknown = array_count_values($cur_bots_unknown);
-					$cur_bots_unknown = [];
+					$oldBotsUnknown = array_count_values($curBotsUnknown);
+					$curBotsUnknown = [];
 				}
-				else // все последующие файлы
+				else 
 				{
-					$old_paths = array_unique(array_merge($old_paths, $cur_paths));
-					$cur_paths = [];
+					$oldPaths = array_unique(array_merge($oldPaths, $curPaths));
+					$curPaths = [];
 
-					$old_statuses = $this->mergeTwoArraysAndCalcValuesByKeys($old_statuses, array_count_values($cur_statuses));
-					$cur_statuses = [];
+					$oldStatuses = $this->mergeTwoArraysAndCalcValuesByKeys($oldStatuses, array_count_values($curStatuses));
+					$curStatuses = [];
 
-					$old_bots_known = $this->mergeTwoArraysAndCalcValuesByKeys($old_bots_known, array_count_values($cur_bots_known));
-					$cur_bots_known = [];
+					$oldBotsKnown = $this->mergeTwoArraysAndCalcValuesByKeys($oldBotsKnown, array_count_values($curBotsKnown));
+					$curBotsKnown = [];
 
-					$old_bots_unknown = $this->mergeTwoArraysAndCalcValuesByKeys($old_bots_unknown, array_count_values($cur_bots_unknown));
-					$cur_bots_unknown = [];
+					$oldBotsUnknown = $this->mergeTwoArraysAndCalcValuesByKeys($oldBotsUnknown, array_count_values($curBotsUnknown));
+					$curBotsUnknown = [];
 				}
 			}
 			$j++;
 		}
-		$records_valid = $i;
+		$recordsValid = $i;
 
 		$data = [
 			'lines' => [
-				'total' => $records_all,
-				'good' => $records_valid,
-				'bad' => $records_all - $records_valid,
+				'total' => $recordsAll,
+				'good' => $recordsValid,
+				'bad' => $recordsAll - $recordsValid,
 			],
-			'hits' => $records_valid,
+			'hits' => $recordsValid,
 			'bytes' => $bytes,
-			'paths' => count($old_paths),
-			'statuses' => $old_statuses,
+			'paths' => count($oldPaths),
+			'statuses' => $oldStatuses,
 			'bots' => [
-				'known' => $old_bots_known,
-				'unknown' => $old_bots_unknown,
+				'known' => $oldBotsKnown,
+				'unknown' => $oldBotsUnknown,
 			]
 		];
 
 		return $data;
 	}
 
-	protected function isUserAgentBot($user_agent)
+	protected function isUserAgentBot($userAgent)
 	{
-		if (preg_match('/bot|crawl|slurp|spider|mediapartners/i', $user_agent))
+		if (preg_match('/bot|crawl|slurp|spider|mediapartners/i', $userAgent))
 			return true;
 		else
 			return false;
 	}
 
-	protected function isUserAgentBotKnown($user_agent)
+	protected function isUserAgentBotKnown($userAgent)
 	{
 		foreach ($this->botDetection as $key => $value)
-			if (strstr(strtolower($user_agent), $key))
+			if (strstr(strtolower($userAgent), $key))
 				return $value;
 		return false;
 	}
 
-	// данные с прошло и текущего файлов после прохода через array_count_values()
-	// подсчитываем скока было в прошлом файле статус=200 и в текущем. плюсуем. так для всех статусов и чего угодно в целом
 	protected function mergeTwoArraysAndCalcValuesByKeys($old, $cur)
 	{
 		$uni = array_unique(array_merge(array_flip($old), array_flip($cur)));
@@ -242,29 +304,6 @@ class LogReader
 				$old[$value] = $cur[$value];
 		return $old;
 	}
-
-
-
-	protected function deleteDirectory($dirname) 
-	{
-		if (is_dir($dirname))
-			$dir_handle = opendir($dirname);
-     	if (!$dir_handle)
-          	return false;
-     	while ($file = readdir($dir_handle)) 
-     	{
-           	if ($file != "." && $file != "..") 
-           	{
-                	if (!is_dir($dirname."/".$file))
-                     	unlink($dirname."/".$file);
-                	else
-                     	delete_directory($dirname.'/'.$file);
-           	}
-     	}
-     	closedir($dir_handle);
-     	rmdir($dirname);
-     	return true;
-	}
 }
 
 
@@ -272,9 +311,18 @@ $lr = new LogReader();
 
 $lr->assignLogFileName('access2_log'); // название лог файла для считывания
 if (!$lr->splitLogFile()) { print 'Could not find splitted log files.'; return; }
-$data = $lr->getLogInfo();
+$data = $lr->getLogHeavy(); // считывание большого лог файла, экономия памяти засчет деления лога на части
 
 print $lr->formatBytes(memory_get_peak_usage());
 echo '<pre>'; print json_encode($data, JSON_PRETTY_PRINT); echo '</pre>';
 
+
+echo '<hr/>';
+
+
+$lr->assignLogFileName('access2_log'); // название лог файла для считывания
+$data = $lr->getLogLight(); // считывание лог файла без мысли об экономии памяти
+
+print $lr->formatBytes(memory_get_peak_usage());
+echo '<pre>'; print json_encode($data, JSON_PRETTY_PRINT); echo '</pre>';
 ?>
