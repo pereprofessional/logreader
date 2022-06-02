@@ -67,4 +67,20 @@ Exmple return **$data**:<br/>
 }
 ```
 The script was tested on 2GB access.log file.<br/><br/>
-To start to use the script simply require ReaderLog class and see how to use it in **script_prod.php**.
+To start to use the script simply require ReaderLog class and see how to use it in **script_prod.php**.<br/><br/>
+There is 2 functions to work parse log files:<br/> 
+**getLogHeavy()** divides big file into smaller parts so it's saver for memory;<br/>
+**getLogLight()** does its job without separating the log file. It affects onto memory usage.<br/><br/>
+Usage:
+```
+// getLogHeavy()
+$lr->assignLogFileName('access2_log'); // log file path
+if (!$lr->splitLogFile()) { print 'Could not find splitted log files.'; return; } // trying to split log file into pieces
+$data = $lr->getLogHeavy(); // getting output info
+```
+```
+// getLogLight()
+$lr->assignLogFileName('access2_log'); // log file path
+$data = $lr->getLogLight(); // getting output info
+```
+
